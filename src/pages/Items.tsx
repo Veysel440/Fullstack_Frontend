@@ -1,5 +1,4 @@
-// webapp/src/pages/Items.tsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { json, apiFetch } from "../api";
 import { useAuth } from "../auth";
 import { useToast } from "../ui/toast";
@@ -36,26 +35,29 @@ export default function Items() {
     const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({ key: "id", dir: "desc" });
 
     const pages = useMemo(() => Math.max(1, Math.ceil(total / size)), [total, size]);
+    const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     async function load() {
         setLoading(true);
         try {
-            const params = new URLSearchParams();
-            params.set("page", String(page));
-            params.set("size", String(size));
-            params.set("sort", `${sort.key},${sort.dir}`);
+            const params = new URLSearchParams({
+                page: String(page),
+                size: String(size),
+                sort: `${sort.key},${sort.dir}`,
+            });
             if (q.trim()) params.set("q", q.trim());
-
             const res = await json<PagedItems>(`/items/?${params.toString()}`);
-            setData(res.items);
-            setTotal(res.total);
-        } catch (e: any) {
-            terror(e?.error ?? "Load failed");
-        } finally {
-            setLoading(false);
-        }
+            setData(res.items); setTotal(res.total);
+        } catch (e:any) { terror(e?.error ?? "Load failed"); }
+        finally { setLoading(false); }
     }
-    useEffect(() => { void load(); /* eslint-disable-next-line */ }, [page, size, sort.key, sort.dir]);
+    useEffect(() => { void load(); /* eslint-disable-next-line */ }, [page, sort.key, sort.dir]);
+
+    function debouncedSearch(nextQ: string){
+        setQ(nextQ);
+        if (pending.current) clearTimeout(pending.current);
+        pending.current = setTimeout(() => { setPage(1); void load(); }, 350);
+    }
 
     function toggleSort(k: SortKey) {
         setSort(s => (s.key === k ? { key: k, dir: s.dir === "asc" ? "desc":"asc" } : { key: k, dir: "asc" }));
@@ -69,10 +71,8 @@ export default function Items() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name, price: Number(price) }),
             });
-            setName(""); setPrice(0);
-            toast("Item created");
-            await load();
-        } catch (e: any) { terror(e?.error ?? "Create failed"); }
+            setName(""); setPrice(0); toast("Item created"); await load();
+        } catch (e:any) { terror(e?.error ?? "Create failed"); }
     }
 
     const startEdit = (i: Item) => { setEditId(i.id); setEditName(i.name); setEditPrice(i.price); };
@@ -85,26 +85,21 @@ export default function Items() {
                 method: "PUT", headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ name: editName, price: Number(editPrice) }),
             });
-            toast("Saved");
-            cancelEdit(); await load();
-        } catch (e: any) { terror(e?.error ?? "Update failed"); }
+            toast("Saved"); cancelEdit(); await load();
+        } catch (e:any) { terror(e?.error ?? "Update failed"); }
     }
 
     async function remove(id: number) {
         const r = await apiFetch(`/items/${id}`, { method: "DELETE" });
         if (r.status === 403) { terror("Forbidden: admin required"); return; }
-        if (r.status !== 204) {
-            const j = await r.json().catch(() => null);
-            terror(j?.error ?? `Delete failed ${r.status}`); return;
-        }
-        toast("Deleted");
-        await load();
+        if (r.status !== 204) { const j = await r.json().catch(()=>null); terror(j?.error ?? `Delete failed ${r.status}`); return; }
+        toast("Deleted"); await load();
     }
 
     return (
         <div className="card">
             <header className="row" style={{ justifyContent:"space-between", marginBottom: 12 }}>
-                <h2 style={{margin:0}}>Items</h2>
+                <h2 style={{margin:0}}>Items <span className="badge">({total})</span></h2>
                 <div className="row">
                     <span className="badge" style={{marginRight:8}}>role: {user?.role}</span>
                     <button className="ghost" onClick={logout}>Logout</button>
@@ -112,26 +107,38 @@ export default function Items() {
             </header>
 
             <div className="row" style={{ marginBottom: 12 }}>
-                <input placeholder="Search name…" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=> e.key==="Enter" && (setPage(1), void load())}/>
-                <button onClick={()=> (setPage(1), void load())}>Search</button>
+                <input
+                    name="search"
+                    placeholder="Search name…"
+                    value={q}
+                    onChange={(e)=>debouncedSearch(e.target.value)}
+                />
+                <button onClick={()=>{ setPage(1); void load(); }}>Search</button>
+                {q && <button className="ghost" onClick={()=>{ setQ(""); setPage(1); void load(); }}>Reset</button>}
             </div>
 
             <form onSubmit={add} className="row" style={{ marginBottom: 12 }}>
-                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />
-                <input type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} placeholder="Price" />
-                <button className="primary" type="submit">Add</button>
+                <input name="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />
+                <input name="price" type="number" step="0.01" value={price} onChange={(e) => setPrice(Number(e.target.value))} placeholder="Price" />
+                <button className="primary" type="submit" disabled={loading}>Add</button>
             </form>
 
             <div style={{ overflowX:"auto" }}>
-                <table>
+                <table role="table" aria-label="Items">
                     <thead>
                     <tr>
-                        {columns.map(c=>(
-                            <th key={c.key} className="sortable" role="columnheader"
-                                onClick={()=>toggleSort(c.key as SortKey)}>
-                                {c.label}{sort.key===c.key ? (sort.dir==="asc"?" ▲":" ▼") : ""}
-                            </th>
-                        ))}
+                        {columns.map(c=>{
+                            const active = sort.key===c.key; const dir = active ? sort.dir : undefined;
+                            return (
+                                <th key={c.key}
+                                    className="sortable"
+                                    role="columnheader"
+                                    aria-sort={active ? (dir==="asc"?"ascending":"descending") : "none"}
+                                    onClick={()=>toggleSort(c.key as SortKey)}>
+                                    {c.label}{active ? (dir==="asc"?" ▲":" ▼") : ""}
+                                </th>
+                            );
+                        })}
                         <th>Actions</th>
                     </tr>
                     </thead>
@@ -145,16 +152,8 @@ export default function Items() {
                     {!loading && data.map(i=>(
                         <tr key={i.id}>
                             <td>#{i.id}</td>
-                            <td>
-                                {editId===i.id ? (
-                                    <input value={editName} onChange={e=>setEditName(e.target.value)} />
-                                ) : i.name}
-                            </td>
-                            <td>
-                                {editId===i.id ? (
-                                    <input type="number" step="0.01" value={editPrice} onChange={e=>setEditPrice(Number(e.target.value))}/>
-                                ) : i.price.toFixed(2)}
-                            </td>
+                            <td>{editId===i.id ? <input value={editName} onChange={e=>setEditName(e.target.value)} /> : i.name}</td>
+                            <td>{editId===i.id ? <input type="number" step="0.01" value={editPrice} onChange={e=>setEditPrice(Number(e.target.value))}/> : i.price.toFixed(2)}</td>
                             <td>{new Date(i.created_at).toLocaleString()}</td>
                             <td className="row">
                                 {editId===i.id ? (
@@ -165,7 +164,7 @@ export default function Items() {
                                 ):(
                                     <>
                                         <button onClick={()=>startEdit(i)} type="button">Edit</button>
-                                        {user?.role==="admin" && <button onClick={()=>remove(i.id)} type="button" className="ghost">Delete</button>}
+                                        {user?.role==="admin" && <button onClick={()=>remove(i.id)} type="button" className="danger">Delete</button>}
                                     </>
                                 )}
                             </td>
@@ -178,9 +177,9 @@ export default function Items() {
             <div className="row" style={{ marginTop:12, justifyContent:"space-between" }}>
                 <div className="badge">Total: {total}</div>
                 <div className="row">
-                    <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</button>
+                    <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1 || loading}>Prev</button>
                     <div className="badge">Page {page}/{pages}</div>
-                    <button onClick={()=>setPage(p=>Math.min(pages,p+1))} disabled={page>=pages}>Next</button>
+                    <button onClick={()=>setPage(p=>Math.min(pages,p+1))} disabled={page>=pages || loading}>Next</button>
                 </div>
             </div>
         </div>

@@ -1,6 +1,6 @@
 :root{
     --bg:#0b0c10; --card:#111319; --muted:#9aa4b2; --text:#e6edf3;
-    --primary:#4f8cff; --danger:#ff5d5d; --border:#212634;
+    --primary:#4f8cff; --danger:#ff5d5d; --border:#212634; --ok:#2fb344;
 }
 *{box-sizing:border-box}
 html,body,#root{height:100%}
@@ -8,26 +8,36 @@ body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,Se
 a{color:var(--primary);text-decoration:none}
 .container{max-width:980px;margin:40px auto;padding:0 16px}
 .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px}
-.row{display:flex;gap:8px;align-items:center}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
 input,button,select{
     border-radius:10px;border:1px solid var(--border);background:#0e1016;color:var(--text);
-    padding:10px 12px;
+    padding:10px 12px; outline:none;
 }
-button{cursor:pointer}
+input:focus,button:focus{box-shadow:0 0 0 2px rgba(79,140,255,.35)}
+button{cursor:pointer;transition:.15s opacity}
+button[disabled]{opacity:.6;cursor:not-allowed}
 button.primary{background:var(--primary);border-color:transparent;color:white}
 button.ghost{background:transparent}
+button.danger{border-color:var(--danger);color:var(--danger);background:transparent}
+
 table{width:100%;border-collapse:collapse}
 th,td{padding:10px 8px;border-bottom:1px solid var(--border)}
+tbody tr:hover{background:#0e1119}
 th{color:var(--muted);user-select:none;white-space:nowrap}
 th.sortable{cursor:pointer}
 .badge{padding:.15rem .5rem;border:1px solid var(--border);border-radius:999px;color:var(--muted)}
+
 /* skeleton */
 .skel{position:relative;overflow:hidden;background:#0f121a;border-radius:6px;min-height:16px}
 .skel::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);
     transform:translateX(-100%);animation:sh 1.4s infinite}
 @keyframes sh{to{transform:translateX(100%)}}
+
 /* toast */
 .toast-wrap{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:9999}
-.toast{background:#121826;border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
-.toast.ok{border-color:#2fb344}
+.toast{display:flex;align-items:center;gap:8px;background:#121826;border:1px solid var(--border);
+    color:var(--text);padding:10px 12px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.toast.ok{border-color:var(--ok)}
 .toast.err{border-color:var(--danger)}
+.toast .x{background:transparent;border:0;color:var(--muted);cursor:pointer}

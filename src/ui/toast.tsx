@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 
 type Toast = { id:number; msg:string; kind:"ok"|"err" };
 type CtxT = { toast(msg:string):void; terror(msg:string):void; };
@@ -7,24 +7,37 @@ const Ctx = createContext<CtxT>(null as any);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
     const [list, setList] = useState<Toast[]>([]);
+    const timers = useRef<Record<number, any>>({});
+
     function push(msg:string, kind:Toast["kind"]) {
-        const t = { id: Date.now()+Math.random(), msg, kind };
-        setList(v => [t, ...v].slice(0,5));
-        setTimeout(()=> setList(v => v.filter(x=>x.id !== t.id)), 3500);
+        const id = Date.now()+Math.random();
+        const t: Toast = { id, msg, kind };
+        setList(v => [t, ...v].slice(0, 6));
+        timers.current[id] = setTimeout(() => remove(id), 3500);
     }
-    const value = useMemo(()=>({
-        toast:(m:string)=>push(m,"ok"),
-        terror:(m:string)=>push(m,"err"),
-    }),[]);
+    function remove(id:number){
+        clearTimeout(timers.current[id]); delete timers.current[id];
+        setList(v => v.filter(x => x.id !== id));
+    }
+
+    const value = useMemo(() => ({
+        toast: (m:string)=>push(m,"ok"),
+        terror: (m:string)=>push(m,"err"),
+    }), []);
+
     return (
         <Ctx.Provider value={value}>
             {children}
-            <div className="toast-wrap">
+            <div className="toast-wrap" aria-live="polite" aria-atomic="true">
                 {list.map(t=>(
-                    <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>
+                    <div key={t.id} className={`toast ${t.kind}`} role={t.kind==="err"?"alert":"status"}>
+                        <span>{t.msg}</span>
+                        <button className="x" aria-label="Dismiss" onClick={()=>remove(t.id)}>✕</button>
+                    </div>
                 ))}
             </div>
         </Ctx.Provider>
     );
 }
+
 export const useToast = () => useContext(Ctx);
