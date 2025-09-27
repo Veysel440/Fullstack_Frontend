@@ -32,7 +32,7 @@ export default function Login() {
             setLoading(false);
             return;
         }
-        // auto-login
+
         setLoading(false);
         setMode("login");
         void doLogin(e);
