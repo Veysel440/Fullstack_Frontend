@@ -1,19 +1,23 @@
+import { useState } from "react";
 import { AuthProvider, useAuth } from "./auth";
 import Login from "./pages/Login";
+import Register from "./pages/Register";
 import Items from "./pages/Items";
-import { ToastProvider } from "./ui/toast";
 
 function Gate() {
     const { user } = useAuth();
-    return user ? <Items /> : <Login />;
+    const [view, setView] = useState<"login"|"register">("login");
+
+    if (user) return <Items />;
+    return view === "login"
+        ? <Login onRegister={()=>setView("register")} />
+        : <Register onDone={()=>setView("login")} />;
 }
 
 export default function App() {
     return (
-        <ToastProvider>
-            <AuthProvider>
-                <div className="container"><Gate /></div>
-            </AuthProvider>
-        </ToastProvider>
+        <AuthProvider>
+            <Gate />
+        </AuthProvider>
     );
 }

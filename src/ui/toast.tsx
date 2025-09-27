@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo, useRef, useState } from "react";
+import { Sentry, sentryEnabled } from "../sentry";
 
 type Toast = { id:number; msg:string; kind:"ok"|"err" };
 type CtxT = { toast(msg:string):void; terror(msg:string):void; };
@@ -14,6 +15,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         const t: Toast = { id, msg, kind };
         setList(v => [t, ...v].slice(0, 6));
         timers.current[id] = setTimeout(() => remove(id), 3500);
+
+        if (sentryEnabled) {
+            if (kind === "err") Sentry.captureMessage(msg, "error");
+            else Sentry.addBreadcrumb({ category: "toast", level: "info", message: msg });
+        }
     }
     function remove(id:number){
         clearTimeout(timers.current[id]); delete timers.current[id];
@@ -39,5 +45,4 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         </Ctx.Provider>
     );
 }
-
 export const useToast = () => useContext(Ctx);
